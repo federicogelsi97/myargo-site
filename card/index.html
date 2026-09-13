@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>A dog's health card · Argo</title>
+<!--
+  L'anteprima nelle chat, e perche' conta piu' di quanto sembri.
+
+  Fede, 2026-09-08, con la schermata di WhatsApp: chi riceve questo
+  collegamento alle due di notte deve capire in un colpo d'occhio cos'e'.
+  Prima l'anteprima diceva "Emergency card · Argo" e sotto "myargo.app": il
+  nome nostro e il nostro indirizzo, cioe' due cose che non servono a chi
+  guarda. Non diceva a cosa serve ne' cosa ci trovera' dentro.
+
+  La descrizione la mette qui, ed e' l'unica riga che WhatsApp mostra sotto
+  il titolo.
+
+  **Il nome del cane nell'anteprima non c'e', e non e' una dimenticanza.**
+  Questa pagina e' statica e il nome arriva dopo, con una chiamata fatta dal
+  browser: chi legge le anteprime non esegue il JavaScript, quindi vedrebbe
+  comunque il titolo scritto qui. Metterlo vorrebbe dire far servire la
+  pagina da una funzione che legge il gettone e scrive il titolo prima di
+  mandarla. Si puo' fare e vale la pena: sta fra le cose rimandate.
+-->
+<meta name="description" content="Vaccines, medicines, allergies and the vet's number, kept up to date by the person who looks after this dog.">
+<meta property="og:title" content="A dog's health card">
+<meta property="og:description" content="Vaccines, medicines, allergies and the vet's number, for whoever is with them right now.">
+<meta property="og:site_name" content="Argo">
+<meta property="og:type" content="website">
+<!--
+  L'emergency card (spec 4, tab 3): myargo.app/card?t=<token>. Pagina
+  statica: legge il token dall'indirizzo, chiede il JSON alla funzione
+  server `card` (supabase/functions/card) e lo rende. Tutto ciò che viene
+  dal fascicolo passa da textContent, mai da innerHTML: è una pagina
+  pubblica senza login e i testi sono dell'utente. Nessuna dipendenza,
+  nessuna richiesta oltre a quella.
+-->
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; background: #f6f1ea; color: #1f1a17; font: 16px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 28px 20px 48px; }
+  header { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+  header img { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; background: #e6dccf; flex: none; }
+  h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 500; font-size: 30px; margin: 0; overflow-wrap: anywhere; }
+  h2 { font-family: Georgia, "Times New Roman", serif; font-weight: 500; font-size: 18px; margin: 0 0 8px; }
+  p { margin: 0; }
+  .muted { color: #6b625b; }
+  .stamp { margin: 4px 0 8px; font-size: 14px; }
+  section { background: #fffdf9; border: 1px solid #e6dccf; border-radius: 14px; padding: 16px 18px; margin-top: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 6px 0; border-top: 1px solid #efe7dc; vertical-align: top; overflow-wrap: anywhere; }
+  tr:first-child td { border-top: 0; }
+  td.when { color: #6b625b; text-align: right; white-space: nowrap; padding-left: 12px; }
+  .contact { white-space: pre-wrap; overflow-wrap: anywhere; }
+  footer { margin-top: 24px; color: #6b625b; font-size: 13px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div id="status"><p class="muted">Loading the card…</p></div>
+  <div id="card" hidden>
+    <header>
+      <img id="photo" alt="" hidden>
+      <div><h1 id="name"></h1><p id="about" class="muted"></p></div>
+    </header>
+    <p id="stamp" class="muted stamp"></p>
+    <section id="notes" hidden><h2 id="notes-title"></h2><div id="diet"></div><div id="conditions"></div><div id="personality"></div></section>
+    <section><h2>Vaccines</h2><div id="vaccines"></div></section>
+    <section><h2>Parasite prevention</h2><div id="parasites"></div></section>
+    <section><h2>Current medication</h2><p class="muted">As prescribed by the vet.</p><div id="medications"></div></section>
+    <section><h2>Contact</h2><div id="contact"></div></section>
+    <footer id="footer"></footer>
+  </div>
+</main>
+<script>
+(function () {
+  var FUNCTION_URL = 'https://qeovovkxeaneaswygefi.supabase.co/functions/v1/card';
+  var TOKEN = /^[0-9a-f]{40}$/;
+
+  function el(tag, text, cls) {
+    var e = document.createElement(tag);
+    if (text != null) e.textContent = text;
+    if (cls) e.className = cls;
+    return e;
+  }
+  function table(rows) {
+    var t = document.createElement('table');
+    rows.forEach(function (r) {
+      var tr = document.createElement('tr');
+      var left = document.createElement('td');
+      left.appendChild(el('span', r.left));
+      if (r.sub) { left.appendChild(document.createElement('br')); left.appendChild(el('span', r.sub, 'muted')); }
+      if (r.sub2) { left.appendChild(document.createElement('br')); left.appendChild(el('span', r.sub2, 'muted')); }
+      tr.appendChild(left);
+      tr.appendChild(el('td', r.right || '', 'when'));
+      t.appendChild(tr);
+    });
+    return t;
+  }
+  function fill(id, node) {
+    var box = document.getElementById(id);
+    box.textContent = '';
+    box.appendChild(node);
+  }
+  function show(status, text) {
+    var s = document.getElementById('status');
+    s.textContent = '';
+    s.appendChild(el('h1', status));
+    if (text) s.appendChild(el('p', text, 'muted'));
+    s.hidden = false;
+    document.getElementById('card').hidden = true;
+  }
+  function render(c) {
+    var name = c.dog.name || 'Your dog';
+    // Il nome della scheda è "{Nome}'s card" (decisione di Fede sul commento 3).
+    document.title = name + '’s card';
+    document.getElementById('name').textContent = name;
+    var about = [c.dog.breed, c.dog.age, c.dog.sex ? c.dog.sex + (c.dog.neutered ? ', neutered' : '') : null].filter(Boolean).join(' · ');
+    document.getElementById('about').textContent = about;
+    if (c.dog.photoUrl && /^https:\/\//.test(c.dog.photoUrl)) {
+      var img = document.getElementById('photo');
+      img.src = c.dog.photoUrl;
+      img.hidden = false;
+    }
+    document.getElementById('stamp').textContent = name + '’s card · shared from Argo' + (c.createdAt ? ' · created ' + c.createdAt : '');
+    // I segni particolari, solo se il padrone li ha scritti: la dieta per
+    // prima, perché è quella che serve subito a chi tiene il cane. Sempre
+    // textContent, mai innerHTML: sono parole scritte da una persona.
+    if (c.dog.diet || c.dog.conditions || c.dog.personality) {
+      document.getElementById('notes-title').textContent = 'About ' + name;
+      if (c.dog.diet) fill('diet', table([{ left: 'Diet and allergies', sub: c.dog.diet, right: '' }]));
+      if (c.dog.conditions) fill('conditions', table([{ left: 'Known conditions', sub: c.dog.conditions, right: '' }]));
+      if (c.dog.personality) fill('personality', table([{ left: 'Character', sub: c.dog.personality, right: '' }]));
+      document.getElementById('notes').hidden = false;
+    }
+    fill('vaccines', c.vaccines.length ? table(c.vaccines.map(function (v) {
+      return { left: v.name, sub: v.date ? 'given ' + v.date : null, right: v.nextDueDate ? 'next ' + v.nextDueDate : '' };
+    })) : el('p', 'No vaccines recorded.', 'muted'));
+    fill('parasites', c.parasites.length ? table(c.parasites.map(function (p) {
+      return { left: p.product ? p.kind + ' · ' + p.product : p.kind, sub: p.date ? 'given ' + p.date : null, right: p.nextDueDate ? 'next ' + p.nextDueDate : '' };
+    })) : el('p', 'Nothing recorded.', 'muted'));
+    fill('medications', c.medications.length ? table(c.medications.map(function (m) {
+      return { left: m.name, sub: m.schedule, sub2: m.prescribedBy ? 'prescribed by ' + m.prescribedBy : null, right: m.endDate ? 'until ' + m.endDate : 'ongoing' };
+    })) : el('p', 'No current medication recorded.', 'muted'));
+    fill('contact', c.contact ? el('p', c.contact, 'contact') : el('p', 'No contact written on this card.', 'muted'));
+    document.getElementById('footer').textContent = 'This card is read-only. It shows what ' + name + '’s owner recorded in Argo. If ' + name + ' is unwell, call a vet.';
+    document.getElementById('status').hidden = true;
+    document.getElementById('card').hidden = false;
+  }
+
+  var token = new URLSearchParams(location.search).get('t') || '';
+  if (!TOKEN.test(token)) {
+    show('This card isn’t available.', 'The link may have been revoked by the dog’s owner, or it was copied wrong.');
+    return;
+  }
+  fetch(FUNCTION_URL + '?t=' + token, { cache: 'no-store' }).then(function (res) {
+    if (res.status === 404) { show('This card isn’t available.', 'The link may have been revoked by the dog’s owner, or it was copied wrong.'); return null; }
+    if (!res.ok) { show('Try again in a minute.'); return null; }
+    return res.json();
+  }).then(function (c) {
+    if (c) render(c);
+  }).catch(function () {
+    show('Try again in a minute.', 'Check your connection.');
+  });
+})();
+</script>
+</body>
+</html>
